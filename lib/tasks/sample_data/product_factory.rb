@@ -12,7 +12,6 @@ class ProductFactory
 
   private
 
-  # rubocop:disable Metrics/MethodLength, Metrics/AbcSize
   def product_data(enterprises)
     vegetables = Spree::Taxon.find_by_name('Vegetables')
     fruit = Spree::Taxon.find_by_name('Fruit')
@@ -64,7 +63,6 @@ class ProductFactory
       }
     ]
   end
-  # rubocop:enable Metrics/MethodLength, Metrics/AbcSize
 
   def create_product(hash)
     log "- #{hash[:name]}"
@@ -74,10 +72,18 @@ class ProductFactory
       variant_unit: "weight",
       variant_unit_scale: 1,
       unit_value: 1,
-      shipping_category: Spree::ShippingCategory.find_or_create_by_name('Default')
+      shipping_category: DefaultShippingCategory.find_or_create,
+      tax_category_id: find_or_create_tax_category.id
     )
     product = Spree::Product.create_with(params).find_or_create_by_name!(params[:name])
     product.variants.first.update_attribute :on_demand, true
     product
+  end
+
+  def find_or_create_tax_category
+    tax_category_name = "Tax Category"
+    tax_category = Spree::TaxCategory.find_by_name(tax_category_name)
+    tax_category ||= Spree::TaxCategory.create!(name: tax_category_name)
+    tax_category
   end
 end

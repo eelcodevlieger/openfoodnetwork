@@ -11,7 +11,7 @@
 #
 # It's strongly recommended to check this file into your version control system.
 
-ActiveRecord::Schema.define(:version => 20190504151144) do
+ActiveRecord::Schema.define(:version => 20200406085833) do
 
   create_table "adjustment_metadata", :force => true do |t|
     t.integer "adjustment_id"
@@ -175,7 +175,7 @@ ActiveRecord::Schema.define(:version => 20190504151144) do
 
   create_table "enterprises", :force => true do |t|
     t.string   "name"
-    t.string   "description"
+    t.text     "description"
     t.text     "long_description"
     t.boolean  "is_primary_producer"
     t.string   "contact_name"
@@ -185,7 +185,7 @@ ActiveRecord::Schema.define(:version => 20190504151144) do
     t.string   "abn"
     t.string   "acn"
     t.integer  "address_id"
-    t.string   "pickup_times"
+    t.text     "pickup_times"
     t.string   "next_collection_at"
     t.datetime "created_at",                                   :null => false
     t.datetime "updated_at",                                   :null => false
@@ -247,12 +247,12 @@ ActiveRecord::Schema.define(:version => 20190504151144) do
     t.integer  "order_cycle_id"
     t.integer  "sender_id"
     t.integer  "receiver_id"
-    t.string   "pickup_time"
-    t.string   "pickup_instructions"
+    t.text     "pickup_time"
+    t.text     "pickup_instructions"
     t.datetime "created_at",                               :null => false
     t.datetime "updated_at",                               :null => false
     t.boolean  "incoming",              :default => false, :null => false
-    t.string   "receival_instructions"
+    t.text     "receival_instructions"
   end
 
   add_index "exchanges", ["order_cycle_id"], :name => "index_exchanges_on_order_cycle_id"
@@ -521,11 +521,6 @@ ActiveRecord::Schema.define(:version => 20190504151144) do
     t.integer  "position",                    :default => 0, :null => false
   end
 
-  create_table "spree_option_types_prototypes", :id => false, :force => true do |t|
-    t.integer "prototype_id"
-    t.integer "option_type_id"
-  end
-
   create_table "spree_option_values", :force => true do |t|
     t.integer  "position"
     t.string   "name"
@@ -563,7 +558,6 @@ ActiveRecord::Schema.define(:version => 20190504151144) do
     t.integer  "bill_address_id"
     t.integer  "ship_address_id"
     t.decimal  "payment_total",                      :precision => 10, :scale => 2, :default => 0.0
-    t.integer  "shipping_method_id"
     t.string   "shipment_state"
     t.string   "payment_state"
     t.string   "email"
@@ -576,9 +570,12 @@ ActiveRecord::Schema.define(:version => 20190504151144) do
     t.integer  "created_by_id"
   end
 
-  add_index "spree_orders", ["completed_at"], :name => "index_spree_orders_on_completed_at"
+  add_index "spree_orders", ["completed_at", "user_id", "created_by_id", "created_at"], :name => "spree_orders_completed_at_user_id_created_by_id_created_at_idx"
   add_index "spree_orders", ["customer_id"], :name => "index_spree_orders_on_customer_id"
+  add_index "spree_orders", ["distributor_id"], :name => "index_spree_orders_on_distributor_id"
   add_index "spree_orders", ["number"], :name => "index_orders_on_number"
+  add_index "spree_orders", ["order_cycle_id"], :name => "index_spree_orders_on_order_cycle_id"
+  add_index "spree_orders", ["user_id"], :name => "index_spree_orders_on_user_id"
 
   create_table "spree_payment_methods", :force => true do |t|
     t.string   "type"
@@ -605,7 +602,7 @@ ActiveRecord::Schema.define(:version => 20190504151144) do
     t.string   "avs_response"
     t.string   "identifier"
     t.string   "cvv_response_code"
-    t.string   "cvv_response_message"
+    t.text     "cvv_response_message"
   end
 
   add_index "spree_payments", ["order_id"], :name => "index_spree_payments_on_order_id"
@@ -649,9 +646,10 @@ ActiveRecord::Schema.define(:version => 20190504151144) do
   add_index "spree_preferences", ["key"], :name => "index_spree_preferences_on_key", :unique => true
 
   create_table "spree_prices", :force => true do |t|
-    t.integer "variant_id",                               :null => false
-    t.decimal "amount",     :precision => 8, :scale => 2
-    t.string  "currency"
+    t.integer  "variant_id",                               :null => false
+    t.decimal  "amount",     :precision => 8, :scale => 2
+    t.string   "currency"
+    t.datetime "deleted_at"
   end
 
   add_index "spree_prices", ["variant_id"], :name => "index_spree_prices_on_variant_id"
@@ -727,6 +725,7 @@ ActiveRecord::Schema.define(:version => 20190504151144) do
   add_index "spree_products", ["permalink"], :name => "index_products_on_permalink"
   add_index "spree_products", ["permalink"], :name => "permalink_idx_unique", :unique => true
   add_index "spree_products", ["primary_taxon_id"], :name => "index_spree_products_on_primary_taxon_id"
+  add_index "spree_products", ["supplier_id"], :name => "index_spree_products_on_supplier_id"
 
   create_table "spree_products_promotion_rules", :id => false, :force => true do |t|
     t.integer "product_id"
@@ -781,17 +780,6 @@ ActiveRecord::Schema.define(:version => 20190504151144) do
     t.string   "presentation", :null => false
     t.datetime "created_at",   :null => false
     t.datetime "updated_at",   :null => false
-  end
-
-  create_table "spree_properties_prototypes", :id => false, :force => true do |t|
-    t.integer "prototype_id"
-    t.integer "property_id"
-  end
-
-  create_table "spree_prototypes", :force => true do |t|
-    t.string   "name"
-    t.datetime "created_at", :null => false
-    t.datetime "updated_at", :null => false
   end
 
   create_table "spree_return_authorizations", :force => true do |t|
@@ -1059,7 +1047,7 @@ ActiveRecord::Schema.define(:version => 20190504151144) do
     t.datetime "reset_password_sent_at"
     t.string   "api_key",                :limit => 40
     t.integer  "enterprise_limit",                     :default => 5, :null => false
-    t.string   "locale",                 :limit => 5
+    t.string   "locale",                 :limit => 6
     t.string   "confirmation_token"
     t.datetime "confirmed_at"
     t.datetime "confirmation_sent_at"
@@ -1210,12 +1198,13 @@ ActiveRecord::Schema.define(:version => 20190504151144) do
   add_index "variant_overrides", ["variant_id", "hub_id"], :name => "index_variant_overrides_on_variant_id_and_hub_id"
 
   create_table "versions", :force => true do |t|
-    t.string   "item_type",  :null => false
-    t.integer  "item_id",    :null => false
-    t.string   "event",      :null => false
+    t.string   "item_type",   :null => false
+    t.integer  "item_id",     :null => false
+    t.string   "event",       :null => false
     t.string   "whodunnit"
     t.text     "object"
     t.datetime "created_at"
+    t.text     "custom_data"
   end
 
   add_index "versions", ["item_type", "item_id"], :name => "index_versions_on_item_type_and_item_id"
@@ -1290,9 +1279,6 @@ ActiveRecord::Schema.define(:version => 20190504151144) do
   add_foreign_key "spree_line_items", "spree_orders", name: "spree_line_items_order_id_fk", column: "order_id"
   add_foreign_key "spree_line_items", "spree_variants", name: "spree_line_items_variant_id_fk", column: "variant_id"
 
-  add_foreign_key "spree_option_types_prototypes", "spree_option_types", name: "spree_option_types_prototypes_option_type_id_fk", column: "option_type_id"
-  add_foreign_key "spree_option_types_prototypes", "spree_prototypes", name: "spree_option_types_prototypes_prototype_id_fk", column: "prototype_id"
-
   add_foreign_key "spree_option_values", "spree_option_types", name: "spree_option_values_option_type_id_fk", column: "option_type_id"
 
   add_foreign_key "spree_option_values_variants", "spree_option_values", name: "spree_option_values_variants_option_value_id_fk", column: "option_value_id"
@@ -1333,9 +1319,6 @@ ActiveRecord::Schema.define(:version => 20190504151144) do
   add_foreign_key "spree_promotion_actions", "spree_activators", name: "spree_promotion_actions_activator_id_fk", column: "activator_id"
 
   add_foreign_key "spree_promotion_rules", "spree_activators", name: "spree_promotion_rules_activator_id_fk", column: "activator_id"
-
-  add_foreign_key "spree_properties_prototypes", "spree_properties", name: "spree_properties_prototypes_property_id_fk", column: "property_id"
-  add_foreign_key "spree_properties_prototypes", "spree_prototypes", name: "spree_properties_prototypes_prototype_id_fk", column: "prototype_id"
 
   add_foreign_key "spree_return_authorizations", "spree_orders", name: "spree_return_authorizations_order_id_fk", column: "order_id"
 

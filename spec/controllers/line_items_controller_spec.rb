@@ -13,13 +13,13 @@ describe LineItemsController, type: :controller do
     end
 
     before do
-      controller.stub spree_current_user: user
-      controller.stub current_order_cycle: order_cycle
-      controller.stub current_distributor: distributor
+      allow(controller).to receive_messages spree_current_user: user
+      allow(controller).to receive_messages current_order_cycle: order_cycle
+      allow(controller).to receive_messages current_distributor: distributor
     end
 
     it "lists items bought by the user from the same shop in the same order_cycle" do
-      get :bought, { format: :json }
+      get :bought, format: :json
       expect(response.status).to eq 200
       json_response = JSON.parse(response.body)
       expect(json_response.length).to eq completed_order.line_items(:reload).count
@@ -39,7 +39,7 @@ describe LineItemsController, type: :controller do
       let(:order) { item.order }
       let(:order_cycle) { create(:simple_order_cycle, distributors: [distributor], variants: [order.line_item_variants]) }
 
-      before { controller.stub spree_current_user: item.order.user }
+      before { allow(controller).to receive_messages spree_current_user: item.order.user }
 
       context "without a line item id" do
         it "fails and raises an error" do
@@ -59,7 +59,10 @@ describe LineItemsController, type: :controller do
         end
 
         context "where the item's order is associated with the current user" do
-          before { order.update_attributes!(user_id: user.id) }
+          before do
+            order.update_attributes!(user_id: user.id)
+            allow(controller).to receive_messages spree_current_user: item.order.user
+          end
 
           context "without an order cycle or distributor" do
             it "denies deletion" do
@@ -112,7 +115,7 @@ describe LineItemsController, type: :controller do
 
         # Delete the item
         item = order.line_items.first
-        controller.stub spree_current_user: order.user
+        allow(controller).to receive_messages spree_current_user: order.user
         request = { format: :json, id: item }
         delete :destroy, request
         expect(response.status).to eq 204
@@ -146,7 +149,7 @@ describe LineItemsController, type: :controller do
       it "updates the fees" do
         expect(order.reload.adjustment_total).to eq enterprise_fee.calculator.preferred_amount
 
-        controller.stub spree_current_user: user
+        allow(controller).to receive_messages spree_current_user: user
         delete :destroy, params
         expect(response.status).to eq 204
 

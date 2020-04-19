@@ -1,9 +1,9 @@
 require "spec_helper"
 
-feature %q{
+feature '
     As an administrator
     I want to manage adjustments on orders
-}, js: true do
+', js: true do
   include AuthenticationWorkflow
   include WebHelper
 
@@ -34,9 +34,9 @@ feature %q{
     click_button 'Continue'
 
     # Then I should see the adjustment, with the correct tax
-    page.should have_selector 'td.label', text: 'Late fee'
-    page.should have_selector 'td.amount', text: '110'
-    page.should have_selector 'td.included-tax', text: '10'
+    expect(page).to have_selector 'td.label', text: 'Late fee'
+    expect(page).to have_selector 'td.amount', text: '110'
+    expect(page).to have_selector 'td.included-tax', text: '10'
   end
 
   scenario "modifying taxed adjustments on an order" do
@@ -59,8 +59,8 @@ feature %q{
     click_button 'Continue'
 
     # Then the adjustment tax should be cleared
-    page.should have_selector 'td.amount', text: '110'
-    page.should have_selector 'td.included-tax', text: '0'
+    expect(page).to have_selector 'td.amount', text: '110'
+    expect(page).to have_selector 'td.included-tax', text: '0'
   end
 
   scenario "modifying an untaxed adjustment on an order" do
@@ -83,7 +83,7 @@ feature %q{
     click_button 'Continue'
 
     # Then the adjustment tax should be recalculated
-    page.should have_selector 'td.amount', text: '110'
-    page.should have_selector 'td.included-tax', text: '10'
+    expect(page).to have_selector 'td.amount', text: '110'
+    expect(page).to have_selector 'td.included-tax', text: '10'
   end
 end

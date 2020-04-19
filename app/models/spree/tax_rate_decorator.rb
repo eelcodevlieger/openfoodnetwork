@@ -1,11 +1,14 @@
 module Spree
   TaxRate.class_eval do
     class << self
-      def match_with_sales_tax_registration(order)
+      def match(order)
         return [] if order.distributor && !order.distributor.charges_sales_tax
-        match_without_sales_tax_registration(order)
+        return [] unless order.tax_zone
+
+        all.select do |rate|
+          rate.zone == order.tax_zone || rate.zone.contains?(order.tax_zone) || rate.zone.default_tax
+        end
       end
-      alias_method_chain :match, :sales_tax_registration
     end
 
     def adjust_with_included_tax(order)
@@ -42,7 +45,7 @@ module Spree
     private
 
     def with_tax_included_in_price
-      old_included_in_price = self.included_in_price
+      old_included_in_price = included_in_price
 
       self.included_in_price = true
       calculator.calculable.included_in_price = true

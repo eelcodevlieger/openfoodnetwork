@@ -15,7 +15,7 @@ Spree::ShippingMethod.class_eval do
       scoped
     else
       joins(:distributors).
-        where('distributors_shipping_methods.distributor_id IN (?)', user.enterprises).
+        where('distributors_shipping_methods.distributor_id IN (?)', user.enterprises.select(&:id)).
         select('DISTINCT spree_shipping_methods.*')
     end
   }
@@ -29,8 +29,7 @@ Spree::ShippingMethod.class_eval do
       where('enterprises.id = ?', distributor)
   }
 
-  scope :by_name, order('spree_shipping_methods.name ASC')
-
+  scope :by_name, -> { order('spree_shipping_methods.name ASC') }
 
   # Return the services (pickup, delivery) that different distributors provide, in the format:
   # {distributor_id => {pickup: true, delivery: false}, ...}
@@ -42,7 +41,7 @@ Spree::ShippingMethod.class_eval do
         select("distributor_id").
         select("BOOL_OR(spree_shipping_methods.require_ship_address = 'f') AS pickup").
         select("BOOL_OR(spree_shipping_methods.require_ship_address = 't') AS delivery").
-        map { |sm| [sm.distributor_id.to_i, {pickup: sm.pickup == 't', delivery: sm.delivery == 't'}] }
+        map { |sm| [sm.distributor_id.to_i, { pickup: sm.pickup == 't', delivery: sm.delivery == 't' }] }
     ]
   end
 
@@ -54,8 +53,15 @@ Spree::ShippingMethod.class_eval do
     spree_calculators.send model_name_without_spree_namespace
   end
 
+  # This is bypassing the validation of shipping method zones on checkout
+  # It allows checkout using shipping methods without zones (see issue #3928 for details)
+  #   and it allows checkout with addresses outside of the zones of the selected shipping method
+  def include?(address)
+    address.present?
+  end
+
   def has_distributor?(distributor)
-    self.distributors.include?(distributor)
+    distributors.include?(distributor)
   end
 
   def adjustment_label

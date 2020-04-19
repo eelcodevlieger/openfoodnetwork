@@ -30,7 +30,9 @@ module OpenFoodNetwork
     end
 
     def query_scope
-      Spree::Variant.where(is_master: false).ransack(search_params.merge(m: 'or')).result
+      Spree::Variant.where(is_master: false).
+        includes(option_values: :option_type).
+        ransack(search_params.merge(m: 'or')).result
     end
 
     def distributor
@@ -59,7 +61,7 @@ module OpenFoodNetwork
     end
 
     def scope_to_eligible_for_subscriptions_in_distributor
-      eligible_variants_scope = SubscriptionVariantsService.eligible_variants(distributor)
+      eligible_variants_scope = OrderManagement::Subscriptions::VariantsList.eligible_variants(distributor)
       @variants = @variants.merge(eligible_variants_scope)
       scope_variants_to_distributor(@variants, distributor)
     end

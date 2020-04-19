@@ -2,21 +2,15 @@ require 'spec_helper'
 
 describe EnterpriseFee do
   describe "associations" do
-    it { should belong_to(:enterprise) }
+    it { is_expected.to belong_to(:enterprise) }
   end
 
   describe "validations" do
-    it { should validate_presence_of(:name) }
+    it { is_expected.to validate_presence_of(:name) }
   end
 
   describe "callbacks" do
     let(:ef) { create(:enterprise_fee) }
-
-    it "refreshes the products cache when saved" do
-      expect(OpenFoodNetwork::ProductsCache).to receive(:enterprise_fee_changed).with(ef)
-      ef.name = 'foo'
-      ef.save
-    end
 
     it "removes itself from order cycle coordinator fees when destroyed" do
       oc = create(:simple_order_cycle, coordinator_fees: [ef])
@@ -37,8 +31,7 @@ describe EnterpriseFee do
       let(:tax_category) { create(:tax_category) }
       let(:enterprise_fee) { create(:enterprise_fee, tax_category_id: nil, inherits_tax_category: true) }
 
-
-      it  "maintains valid tax_category settings" do
+      it "maintains valid tax_category settings" do
         # Changing just tax_category, when inheriting
         # tax_category is changed, inherits.. set to false
         enterprise_fee.assign_attributes(tax_category_id: tax_category.id)
@@ -133,11 +126,11 @@ describe EnterpriseFee do
     it "does not clear adjustments from another originator" do
       order = create(:order)
       tax_rate = create(:tax_rate, calculator: build(:calculator))
-      order.adjustments.create({:amount => 12.34,
-                                :source => order,
-                                :originator => tax_rate,
-                                :state => 'closed',
-                                :label => 'hello' }, :without_protection => true)
+      order.adjustments.create({ amount: 12.34,
+                                 source: order,
+                                 originator: tax_rate,
+                                 state: 'closed',
+                                 label: 'hello' }, without_protection: true)
 
       expect do
         EnterpriseFee.clear_all_adjustments_on_order order

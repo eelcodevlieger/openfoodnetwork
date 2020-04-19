@@ -24,6 +24,7 @@ require "#{Rails.root}/app/models/spree/gateway_decorator"
 Spree.config do |config|
   config.shipping_instructions = true
   config.address_requires_state = true
+  config.admin_interface_logo = 'ofn-logo.png'
 
   # -- spree_paypal_express
   # Auto-capture payments. Without this option, payments must be manually captured in the paypal interface.
@@ -43,9 +44,6 @@ end
 
 # Spree 2.0 recommends explicitly setting this here when using spree_auth_devise
 Spree.user_class = 'Spree::User'
-
-# Don't log users out when setting a new password
-Spree::Auth::Config[:signout_after_password_change] = false
 
 # TODO Work out why this is necessary
 # Seems like classes within OFN module become 'uninitialized' when server reloads

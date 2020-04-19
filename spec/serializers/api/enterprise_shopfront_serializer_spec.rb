@@ -24,7 +24,7 @@ describe Api::EnterpriseShopfrontSerializer do
   end
 
   it "serializes next order cycle close time" do
-    expect(serializer.serializable_hash[:orders_close_at]).to match oc.orders_close_at
+    expect(serializer.serializable_hash[:orders_close_at].round).to match oc.orders_close_at.round
   end
 
   it "serializes shipping method types" do
@@ -32,17 +32,17 @@ describe Api::EnterpriseShopfrontSerializer do
     expect(serializer.serializable_hash[:delivery]).to eq true
   end
 
-  it "serialises an array of hubs" do
+  it "serializes an array of hubs" do
     expect(serializer.serializable_hash[:hubs]).to be_a ActiveModel::ArraySerializer
     expect(serializer.serializable_hash[:hubs].to_json).to match hub.name
   end
 
-  it "serialises an array of producers" do
+  it "serializes an array of producers" do
     expect(serializer.serializable_hash[:producers]).to be_a ActiveModel::ArraySerializer
     expect(serializer.serializable_hash[:producers].to_json).to match producer.name
   end
 
-  it "serialises taxons" do
+  it "serializes taxons" do
     expect(serializer.serializable_hash[:taxons]).to be_a ActiveModel::ArraySerializer
     expect(serializer.serializable_hash[:taxons].to_json).to match 'Meat'
     expect(serializer.serializable_hash[:taxons].to_json).to match 'Veg'

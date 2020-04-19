@@ -319,7 +319,6 @@ describe OrderManagement::Reports::EnterpriseFeeSummary::ReportService do
                                             amount: 25)
       end
       let!(:distributor_fee) do
-        tax_category = create(:tax_category, name: "Distributor Tax A")
         create(:enterprise_fee, :flat_rate, name: "Distributor Fee A", enterprise: distributor,
                                             fee_type: "admin", inherits_tax_category: false,
                                             amount: 30)
@@ -353,7 +352,7 @@ describe OrderManagement::Reports::EnterpriseFeeSummary::ReportService do
         expect(totals.length).to eq(11)
 
         entire_orders_text = i18n_translate("fee_calculated_on_transfer_through_entire_orders",
-                                             distributor: "Sample Distributor")
+                                            distributor: "Sample Distributor")
         various_tax_categories_text = i18n_translate("tax_category_various")
 
         expected_result = [
@@ -518,9 +517,9 @@ describe OrderManagement::Reports::EnterpriseFeeSummary::ReportService do
       let!(:producer_b) { create(:supplier_enterprise, name: "Producer B") }
       let!(:producer_c) { create(:supplier_enterprise, name: "Producer C") }
 
-      let!(:fee_a) { create(:enterprise_fee, name: "Fee A", enterprise: producer_a) }
-      let!(:fee_b) { create(:enterprise_fee, name: "Fee B", enterprise: producer_b) }
-      let!(:fee_c) { create(:enterprise_fee, name: "Fee C", enterprise: producer_c) }
+      let!(:fee_a) { create(:enterprise_fee, name: "Fee A", enterprise: producer_a, amount: 1) }
+      let!(:fee_b) { create(:enterprise_fee, name: "Fee B", enterprise: producer_b, amount: 1) }
+      let!(:fee_c) { create(:enterprise_fee, name: "Fee C", enterprise: producer_c, amount: 1) }
 
       let!(:product_a) { create(:product, supplier: producer_a) }
       let!(:product_b) { create(:product, supplier: producer_b) }
@@ -589,9 +588,9 @@ describe OrderManagement::Reports::EnterpriseFeeSummary::ReportService do
     end
 
     describe "for specified enterprise fees" do
-      let!(:fee_a) { create(:enterprise_fee, name: "Fee A", enterprise: distributor) }
-      let!(:fee_b) { create(:enterprise_fee, name: "Fee B", enterprise: distributor) }
-      let!(:fee_c) { create(:enterprise_fee, name: "Fee C", enterprise: distributor) }
+      let!(:fee_a) { create(:enterprise_fee, name: "Fee A", enterprise: distributor, amount: 1) }
+      let!(:fee_b) { create(:enterprise_fee, name: "Fee B", enterprise: distributor, amount: 1) }
+      let!(:fee_c) { create(:enterprise_fee, name: "Fee C", enterprise: distributor, amount: 1) }
 
       let!(:variant) { prepare_variant(outgoing_exchange_fees: variant_outgoing_exchange_fees) }
       let!(:variant_outgoing_exchange_fees) { [fee_a, fee_b, fee_c] }
@@ -611,10 +610,14 @@ describe OrderManagement::Reports::EnterpriseFeeSummary::ReportService do
 
     describe "for specified shipping methods" do
       let!(:shipping_method_a) do
-        create(:shipping_method, name: "Shipping A", distributors: [distributor])
+        method = create(:shipping_method, name: "Shipping A", distributors: [distributor])
+        method.calculator.update_attribute(:preferred_amount, 1)
+        method
       end
       let!(:shipping_method_b) do
-        create(:shipping_method, name: "Shipping B", distributors: [distributor])
+        method = create(:shipping_method, name: "Shipping B", distributors: [distributor])
+        method.calculator.update_attribute(:preferred_amount, 1)
+        method
       end
       let!(:shipping_method_c) do
         create(:shipping_method, name: "Shipping C", distributors: [distributor])
@@ -639,10 +642,14 @@ describe OrderManagement::Reports::EnterpriseFeeSummary::ReportService do
 
     describe "for specified payment methods" do
       let!(:payment_method_a) do
-        create(:payment_method, name: "Payment A", distributors: [distributor])
+        method = create(:payment_method, name: "Payment A", distributors: [distributor])
+        method.calculator.update_attribute(:preferred_amount, 1)
+        method
       end
       let!(:payment_method_b) do
-        create(:payment_method, name: "Payment B", distributors: [distributor])
+        method = create(:payment_method, name: "Payment B", distributors: [distributor])
+        method.calculator.update_attribute(:preferred_amount, 1)
+        method
       end
       let!(:payment_method_c) do
         create(:payment_method, name: "Payment C", distributors: [distributor])

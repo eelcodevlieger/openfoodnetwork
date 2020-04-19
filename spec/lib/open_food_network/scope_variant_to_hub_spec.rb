@@ -5,7 +5,11 @@ module OpenFoodNetwork
   describe ScopeVariantToHub do
     let(:hub) { create(:distributor_enterprise) }
     let(:v)   { create(:variant, price: 11.11, on_hand: 1, on_demand: true, sku: "VARIANTSKU") }
+    let(:v2)  { create(:variant, price: 22.22, on_hand: 5) }
+    let(:v3)  { create(:variant, price: 33.33, on_hand: 6) }
     let(:vo)  { create(:variant_override, hub: hub, variant: v, price: 22.22, count_on_hand: 2, on_demand: false, sku: "VOSKU") }
+    let(:vo2)  { create(:variant_override, hub: hub, variant: v2, price: 33.33, count_on_hand: nil, on_demand: true) }
+    let(:vo3)  { create(:variant_override, hub: hub, variant: v3, price: 44.44, count_on_hand: 16) }
     let(:vo_price_only) { create(:variant_override, :use_producer_stock_settings, hub: hub, variant: v, price: 22.22) }
     let(:scoper) { ScopeVariantToHub.new(hub) }
 
@@ -13,12 +17,12 @@ module OpenFoodNetwork
       it "returns the overridden price when one is present" do
         vo
         scoper.scope v
-        v.price.should == 22.22
+        expect(v.price).to eq(22.22)
       end
 
       it "returns the variant's price otherwise" do
         scoper.scope v
-        v.price.should == 11.11
+        expect(v.price).to eq(11.11)
       end
     end
 
@@ -26,12 +30,12 @@ module OpenFoodNetwork
       it "returns the overridden price when one is present" do
         vo
         scoper.scope v
-        v.price_in('AUD').amount.should == 22.22
+        expect(v.price_in('AUD').amount).to eq(22.22)
       end
 
       it "returns the variant's price otherwise" do
         scoper.scope v
-        v.price_in('AUD').amount.should == 11.11
+        expect(v.price_in('AUD').amount).to eq(11.11)
       end
     end
 
@@ -39,12 +43,12 @@ module OpenFoodNetwork
       it "returns the overridden stock level when one is present" do
         vo
         scoper.scope v
-        v.on_hand.should == 2
+        expect(v.on_hand).to eq(2)
       end
 
       it "returns the variant's stock level otherwise" do
         scoper.scope v
-        v.on_hand.should == 1
+        expect(v.on_hand).to eq(1)
       end
 
       describe "overriding stock on an on_demand variant" do
@@ -53,18 +57,18 @@ module OpenFoodNetwork
         it "clears on_demand when the stock is overridden" do
           vo
           scoper.scope v
-          v.on_demand.should be false
+          expect(v.on_demand).to be false
         end
 
         it "does not clear on_demand when only the price is overridden" do
           vo_price_only
           scoper.scope v
-          v.on_demand.should be true
+          expect(v.on_demand).to be true
         end
 
         it "does not clear on_demand when there is no override" do
           scoper.scope v
-          v.on_demand.should be true
+          expect(v.on_demand).to be true
         end
       end
 
@@ -116,7 +120,7 @@ module OpenFoodNetwork
 
         context "when an override exists" do
           before { vo }
-        
+
           context "when variant in stock" do
             it "returns true if VO in stock" do
               scoper.scope v
@@ -127,12 +131,12 @@ module OpenFoodNetwork
               vo.update_attribute :count_on_hand, 0
               scoper.scope v
               expect(v.in_stock?).to eq(false)
-            end            
+            end
           end
 
           context "when variant out of stock" do
             before { v.on_hand = 0 }
-            
+
             it "returns true if VO in stock" do
               scoper.scope v
               expect(v.in_stock?).to eq(true)
@@ -142,7 +146,7 @@ module OpenFoodNetwork
               vo.update_attribute :count_on_hand, 0
               scoper.scope v
               expect(v.in_stock?).to eq(false)
-            end            
+            end
           end
         end
 
@@ -156,6 +160,37 @@ module OpenFoodNetwork
             v.on_hand = 0
             scoper.scope v
             expect(v.in_stock?).to eq(false)
+          end
+        end
+      end
+
+      describe "overriding #move" do
+        context "when override is on_demand" do
+          before do
+            vo2
+            scoper.scope v2
+          end
+
+          it "doesn't reduce variant's stock" do
+            v2.move(-2)
+            expect(Spree::Variant.find(v2.id).on_hand).to eq 5
+          end
+        end
+
+        context "when stock is overridden" do
+          before do
+            vo3
+            scoper.scope v3
+          end
+
+          it "reduces the override's stock" do
+            v3.move(-2)
+            expect(vo3.reload.count_on_hand).to eq 14
+          end
+
+          it "doesn't reduce the variant's stock" do
+            v3.move(-2)
+            expect(Spree::Variant.find(v3.id).on_hand).to eq 6
           end
         end
       end

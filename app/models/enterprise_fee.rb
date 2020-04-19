@@ -10,20 +10,13 @@ class EnterpriseFee < ActiveRecord::Base
   has_many :exchange_fees, dependent: :destroy
   has_many :exchanges, through: :exchange_fees
 
-
-  after_save :refresh_products_cache
-  # After destroy, the products cache is refreshed via the after_destroy hook for
-  # coordinator_fees and exchange_fees
-
-
   attr_accessible :enterprise_id, :fee_type, :name, :tax_category_id, :calculator_type, :inherits_tax_category
 
-  FEE_TYPES = %w(packing transport admin sales fundraising)
-  PER_ORDER_CALCULATORS = ['Spree::Calculator::FlatRate', 'Spree::Calculator::FlexiRate', 'Spree::Calculator::PriceSack']
+  FEE_TYPES = %w(packing transport admin sales fundraising).freeze
+  PER_ORDER_CALCULATORS = ['Spree::Calculator::FlatRate', 'Spree::Calculator::FlexiRate', 'Spree::Calculator::PriceSack'].freeze
 
-
-  validates_inclusion_of :fee_type, :in => FEE_TYPES
-  validates_presence_of :name
+  validates :fee_type, inclusion: { in: FEE_TYPES }
+  validates :name, presence: true
 
   before_save :ensure_valid_tax_category_settings
 
@@ -34,7 +27,7 @@ class EnterpriseFee < ActiveRecord::Base
     if user.has_spree_role?('admin')
       scoped
     else
-      where('enterprise_id IN (?)', user.enterprises)
+      where('enterprise_id IN (?)', user.enterprises.select(&:id))
     end
   }
 
@@ -49,7 +42,6 @@ class EnterpriseFee < ActiveRecord::Base
     order.adjustments.where(originator_type: 'EnterpriseFee').destroy_all
   end
 
-
   private
 
   def ensure_valid_tax_category_settings
@@ -61,10 +53,6 @@ class EnterpriseFee < ActiveRecord::Base
     elsif inherits_tax_category_changed?
       self.tax_category_id = nil if inherits_tax_category?
     end
-    return true
-  end
-
-  def refresh_products_cache
-    OpenFoodNetwork::ProductsCache.enterprise_fee_changed self
+    true
   end
 end

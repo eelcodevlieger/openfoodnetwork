@@ -37,8 +37,10 @@ describe VariantOverride do
 
   describe "validation" do
     describe "ensuring that on_demand and count_on_hand are compatible" do
-      let(:variant_override) { build(:variant_override, hub: hub, variant: variant,
-                                     on_demand: on_demand, count_on_hand: count_on_hand) }
+      let(:variant_override) {
+        build(:variant_override, hub: hub, variant: variant,
+                                 on_demand: on_demand, count_on_hand: count_on_hand)
+      }
 
       context "when using producer stock settings" do
         let(:on_demand) { nil }
@@ -111,18 +113,23 @@ describe VariantOverride do
     end
   end
 
-  describe "callbacks" do
-    let!(:vo) { create(:variant_override, hub: hub, variant: variant) }
+  describe "delegated price" do
+    let!(:variant_with_price) { create(:variant, price: 123.45) }
+    let(:price_object) { variant_with_price.default_price }
 
-    it "refreshes the products cache on save" do
-      expect(OpenFoodNetwork::ProductsCache).to receive(:variant_override_changed).with(vo)
-      vo.price = 123.45
-      vo.save
-    end
+    context "when variant is soft-deleted" do
+      before do
+        variant_with_price.destroy
+      end
 
-    it "refreshes the products cache on destroy" do
-      expect(OpenFoodNetwork::ProductsCache).to receive(:variant_override_destroyed).with(vo)
-      vo.destroy
+      it "soft-deletes the price" do
+        expect(price_object.reload.deleted_at).to_not be_nil
+      end
+
+      it "can access the soft-deleted price" do
+        expect(variant_with_price.reload.default_price).to eq price_object
+        expect(variant_with_price.price).to eq 123.45
+      end
     end
   end
 

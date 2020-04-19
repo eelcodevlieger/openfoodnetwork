@@ -9,6 +9,8 @@ Openfoodnetwork::Application.routes.draw do
 
     resources :order_cycles do
       post :bulk_update, on: :collection, as: :bulk_update
+      get :incoming
+      get :outgoing
 
       member do
         get :clone
@@ -74,8 +76,6 @@ Openfoodnetwork::Application.routes.draw do
     end
 
     resource :contents
-
-    resource :cache_settings
 
     resources :column_preferences, only: [], format: :json do
       put :bulk_update, on: :collection

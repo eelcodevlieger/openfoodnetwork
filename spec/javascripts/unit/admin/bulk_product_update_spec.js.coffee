@@ -272,13 +272,9 @@ describe "AdminProductEditCtrl", ->
 
   describe "loading data upon initialisation", ->
     it "gets a list of producers and then resets products with a list of data", ->
-      $httpBackend.expectGET("/api/users/authorise_api?token=API_KEY").respond success: "Use of API Authorised"
       spyOn($scope, "fetchProducts").and.returnValue "nothing"
       $scope.initialise()
-      $httpBackend.flush()
       expect($scope.fetchProducts.calls.count()).toBe 1
-      expect($scope.spree_api_key_ok).toEqual true
-
 
   describe "fetching products", ->
     $q = null
@@ -298,13 +294,6 @@ describe "AdminProductEditCtrl", ->
       $scope.fetchProducts()
       $scope.$digest()
       expect($scope.resetProducts).toHaveBeenCalled()
-
-    it "sets the loading property to true before fetching products and unsets it when loading is complete", ->
-      $scope.fetchProducts()
-      expect($scope.loading).toEqual true
-      $scope.$digest()
-      expect($scope.loading).toEqual false
-
 
   describe "resetting products", ->
     beforeEach ->
@@ -721,13 +710,22 @@ describe "AdminProductEditCtrl", ->
         $httpBackend.flush()
         expect($scope.displayFailure).toHaveBeenCalled()
 
-      it "shows an alert with error information when post returns 400 with an errors array", ->
-        spyOn(window, "alert")
-        $scope.products = "updated list of products"
-        $httpBackend.expectPOST("/admin/products/bulk_update").respond 400, { "errors": ["an error"] }
-        $scope.updateProducts "updated list of products"
-        $httpBackend.flush()
-        expect(window.alert).toHaveBeenCalledWith("Saving failed with the following error(s):\nan error\n")
+      describe "displaying the error information when post returns 400", ->
+        beforeEach ->
+          spyOn $scope, "displayFailure"
+          $scope.products = "updated list of products"
+
+        it "displays errors in an array", ->
+          $httpBackend.expectPOST("/admin/products/bulk_update").respond 400, { "errors": ["an error"] }
+          $scope.updateProducts "updated list of products"
+          $httpBackend.flush()
+          expect($scope.displayFailure).toHaveBeenCalledWith("Saving failed with the following error(s):\nan error\n")
+
+        it "displays errors in a hash", ->
+          $httpBackend.expectPOST("/admin/products/bulk_update").respond 400, { "errors": { "base": ["a basic error"] } }
+          $scope.updateProducts "updated list of products"
+          $httpBackend.flush()
+          expect($scope.displayFailure).toHaveBeenCalledWith("Saving failed with the following error(s):\na basic error\n")
 
 
   describe "adding variants", ->
@@ -752,7 +750,7 @@ describe "AdminProductEditCtrl", ->
 
 
   describe "deleting products", ->
-    it "deletes products with a http delete request to /api/products/id/soft_delete", ->
+    it "deletes products with a http delete request to /api/products/id", ->
       spyOn(window, "confirm").and.returnValue true
       $scope.products = [
         {
@@ -765,7 +763,7 @@ describe "AdminProductEditCtrl", ->
         }
       ]
       $scope.dirtyProducts = {}
-      $httpBackend.expectDELETE("/api/products/13/soft_delete").respond 200, "data"
+      $httpBackend.expectDELETE("/api/products/13").respond 200, "data"
       $scope.deleteProduct $scope.products[1]
       $httpBackend.flush()
 
@@ -784,7 +782,7 @@ describe "AdminProductEditCtrl", ->
       DirtyProducts.addProductProperty 9, "someProperty", "something"
       DirtyProducts.addProductProperty 13, "name", "P1"
 
-      $httpBackend.expectDELETE("/api/products/13/soft_delete").respond 200, "data"
+      $httpBackend.expectDELETE("/api/products/13").respond 200, "data"
       $scope.deleteProduct $scope.products[1]
       $httpBackend.flush()
       expect($scope.products).toEqual [
@@ -824,7 +822,7 @@ describe "AdminProductEditCtrl", ->
 
 
     describe "when the variant has been saved", ->
-      it "deletes variants with a http delete request to /api/products/product_permalink/variants/(variant_id)/soft_delete", ->
+      it "deletes variants with a http delete request to /api/products/product_permalink/variants/(variant_id)", ->
         spyOn(window, "confirm").and.returnValue true
         $scope.products = [
           {
@@ -846,7 +844,7 @@ describe "AdminProductEditCtrl", ->
           }
         ]
         $scope.dirtyProducts = {}
-        $httpBackend.expectDELETE("/api/products/apples/variants/3/soft_delete").respond 200, "data"
+        $httpBackend.expectDELETE("/api/products/apples/variants/3").respond 200, "data"
         $scope.deleteVariant $scope.products[0], $scope.products[0].variants[0]
         $httpBackend.flush()
 
@@ -876,7 +874,7 @@ describe "AdminProductEditCtrl", ->
         DirtyProducts.addVariantProperty 9, 4, "price", 6.0
         DirtyProducts.addProductProperty 13, "name", "P1"
 
-        $httpBackend.expectDELETE("/api/products/apples/variants/3/soft_delete").respond 200, "data"
+        $httpBackend.expectDELETE("/api/products/apples/variants/3").respond 200, "data"
         $scope.deleteVariant $scope.products[0], $scope.products[0].variants[0]
         $httpBackend.flush()
         expect($scope.products[0].variants).toEqual [

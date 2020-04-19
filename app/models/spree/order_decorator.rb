@@ -3,12 +3,14 @@ require 'open_food_network/feature_toggle'
 require 'open_food_network/tag_rule_applicator'
 require 'concerns/order_shipment'
 
-ActiveSupport::Notifications.subscribe('spree.order.contents_changed') do |name, start, finish, id, payload|
+ActiveSupport::Notifications.subscribe('spree.order.contents_changed') do |_name, _start, _finish, _id, payload|
   payload[:order].reload.update_distribution_charge!
 end
 
 Spree::Order.class_eval do
   prepend OrderShipment
+
+  delegate :admin_and_handling_total, :payment_fee, :ship_total, to: :adjustments_fetcher
 
   belongs_to :order_cycle
   belongs_to :distributor, class_name: 'Enterprise'
@@ -20,12 +22,12 @@ Spree::Order.class_eval do
   #   This change is done in Spree 2.1 (see https://github.com/spree/spree/commit/3fa44165c7825f79a2fa4eb79b99dc29944c5d55)
   #   When OFN gets to Spree 2.1, this can be removed
   has_many :adjustments,
-    as: :adjustable,
-    dependent: :destroy,
-    order: "#{Spree::Adjustment.table_name}.created_at ASC"
+           as: :adjustable,
+           dependent: :destroy,
+           order: "#{Spree::Adjustment.table_name}.created_at ASC"
 
   validates :customer, presence: true, if: :require_customer?
-  validate :products_available_from_new_distribution, :if => lambda { distributor_id_changed? || order_cycle_id_changed? }
+  validate :products_available_from_new_distribution, if: lambda { distributor_id_changed? || order_cycle_id_changed? }
   validate :disallow_guest_order
   attr_accessible :order_cycle_id, :distributor_id, :customer_id
 
@@ -54,7 +56,9 @@ Spree::Order.class_eval do
       # Find orders that are distributed by the user or have products supplied by the user
       # WARNING: This only filters orders, you'll need to filter line items separately using LineItem.managed_by
       with_line_items_variants_and_products_outer.
-        where('spree_orders.distributor_id IN (?) OR spree_products.supplier_id IN (?)', user.enterprises, user.enterprises).
+        where('spree_orders.distributor_id IN (?) OR spree_products.supplier_id IN (?)',
+              user.enterprises.select(&:id),
+              user.enterprises.select(&:id)).
         select('DISTINCT spree_orders.*')
     end
   }
@@ -63,7 +67,7 @@ Spree::Order.class_eval do
     if user.has_spree_role?('admin')
       scoped
     else
-      where('spree_orders.distributor_id IN (?)', user.enterprises)
+      where('spree_orders.distributor_id IN (?)', user.enterprises.select(&:id))
     end
   }
 
@@ -113,6 +117,12 @@ Spree::Order.class_eval do
     end
   end
 
+  # "Checkout" is the initial state and, for card payments, "pending" is the state after authorization
+  # These are both valid states to process the payment
+  def pending_payments
+    (payments.select(&:pending?) + payments.select(&:processing?) + payments.select(&:checkout?)).uniq
+  end
+
   def remove_variant(variant)
     line_items(:reload)
     current_item = find_line_item_by_variant(variant)
@@ -126,11 +136,10 @@ Spree::Order.class_eval do
 
     # Notify bugsnag if we get line items with a quantity of zero
     if quantity == 0
-      Bugsnag.notify(RuntimeError.new("Zero Quantity Line Item"), {
-        current_item: current_item.as_json,
-        line_items: line_items.map(&:id),
-        variant: variant.as_json
-      })
+      Bugsnag.notify(RuntimeError.new("Zero Quantity Line Item"),
+                     current_item: current_item.as_json,
+                     line_items: line_items.map(&:id),
+                     variant: variant.as_json)
     end
 
     if current_item
@@ -166,8 +175,25 @@ Spree::Order.class_eval do
   def update_shipping_fees!
     shipments.each do |shipment|
       next if shipment.shipped?
+
       update_adjustment! shipment.adjustment if shipment.adjustment
-      shipment.save # updates included tax
+      save_or_rescue_shipment(shipment)
+    end
+  end
+
+  def save_or_rescue_shipment(shipment)
+    shipment.save # updates included tax
+  rescue ActiveRecord::RecordNotUnique => e
+    # This error was seen in production on `shipment.save` above.
+    # It caused lost payments and duplicate payments due to database rollbacks.
+    # While we don't understand the cause of this error yet, we rescue here
+    # because an outdated shipping fee is not as bad as a lost payment.
+    # And the shipping fee is already up-to-date when this error occurs.
+    # https://github.com/openfoodfoundation/openfoodnetwork/issues/3924
+    Bugsnag.notify(e) do |report|
+      report.add_tab(:order, attributes)
+      report.add_tab(:shipment, shipment.attributes)
+      report.add_tab(:shipment_in_db, Spree::Shipment.find_by_id(shipment.id).attributes)
     end
   end
 
@@ -177,6 +203,7 @@ Spree::Order.class_eval do
   def update_payment_fees!
     payments.each do |payment|
       next if payment.completed?
+
       update_adjustment! payment.adjustment if payment.adjustment
       payment.save
     end
@@ -188,7 +215,7 @@ Spree::Order.class_eval do
 
   def set_distributor!(distributor)
     self.distributor = distributor
-    self.order_cycle = nil unless self.order_cycle.andand.has_distributor? distributor
+    self.order_cycle = nil unless order_cycle.andand.has_distributor? distributor
     save!
   end
 
@@ -242,15 +269,8 @@ Spree::Order.class_eval do
   # Show already bought line items of this order cycle
   def finalised_line_items
     return [] unless order_cycle && user && distributor
+
     order_cycle.items_bought_by_user(user, distributor)
-  end
-
-  def admin_and_handling_total
-    adjustments.eligible.where("originator_type = ? AND source_type != ?", 'EnterpriseFee', 'Spree::LineItem').sum(&:amount)
-  end
-
-  def payment_fee
-    adjustments.payment_fee.map(&:amount).sum
   end
 
   # Does this order have shipments that can be shipped?
@@ -279,11 +299,11 @@ Spree::Order.class_eval do
 
   def tax_adjustments
     adjustments.with_tax +
-      line_items.includes(:adjustments).map {|li| li.adjustments.with_tax }.flatten
+      line_items.includes(:adjustments).map { |li| li.adjustments.with_tax }.flatten
   end
 
   def tax_adjustment_totals
-    tax_adjustments.each_with_object(Hash.new) do |adjustment, hash|
+    tax_adjustments.each_with_object({}) do |adjustment, hash|
       tax_rates = TaxRateFinder.tax_rates_of(adjustment)
       tax_rates_hash = Hash[tax_rates.collect do |tax_rate|
         tax_amount = tax_rates.one? ? adjustment.included_tax : tax_rate.compute_tax(adjustment.amount)
@@ -301,12 +321,12 @@ Spree::Order.class_eval do
   end
 
   def has_taxes_included
-    not line_items.with_tax.empty?
+    !line_items.with_tax.empty?
   end
 
   # Overrride of Spree method, that allows us to send separate confirmation emails to user and shop owners
   def deliver_order_confirmation_email
-    unless subscription.present?
+    if subscription.blank?
       Delayed::Job.enqueue ConfirmOrderJob.new(id)
     end
   end
@@ -337,6 +357,10 @@ Spree::Order.class_eval do
 
   private
 
+  def adjustments_fetcher
+    @adjustments_fetcher ||= OrderAdjustmentsFetcher.new(self)
+  end
+
   def skip_payment_for_subscription?
     subscription.present? && order_cycle.orders_close_at.andand > Time.zone.now
   end
@@ -352,6 +376,7 @@ Spree::Order.class_eval do
 
   def customer_is_valid?
     return true unless require_customer?
+
     customer.present? && customer.enterprise_id == distributor_id && customer.email == email_for_customer
   end
 
@@ -361,6 +386,7 @@ Spree::Order.class_eval do
 
   def associate_customer
     return customer if customer.present?
+
     self.customer = Customer.of(distributor).find_by_email(email_for_customer)
   end
 
@@ -388,6 +414,7 @@ Spree::Order.class_eval do
   def charge_shipping_and_payment_fees!
     update_totals
     return unless payments.any?
+
     payments.first.update_attribute :amount, total
   end
 end

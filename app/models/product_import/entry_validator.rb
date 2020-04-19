@@ -4,7 +4,11 @@
 
 module ProductImport
   class EntryValidator
-    def initialize(current_user, import_time, spreadsheet_data, editable_enterprises, inventory_permissions, reset_counts, import_settings)
+    SKIP_VALIDATE_ON_UPDATE = [:description].freeze
+
+    # rubocop:disable Metrics/ParameterLists
+    def initialize(current_user, import_time, spreadsheet_data, editable_enterprises,
+                   inventory_permissions, reset_counts, import_settings, all_entries)
       @current_user = current_user
       @import_time = import_time
       @spreadsheet_data = spreadsheet_data
@@ -12,7 +16,9 @@ module ProductImport
       @inventory_permissions = inventory_permissions
       @reset_counts = reset_counts
       @import_settings = import_settings
+      @all_entries = all_entries
     end
+    # rubocop:enable Metrics/ParameterLists
 
     def self.non_updatable_fields
       {
@@ -30,6 +36,7 @@ module ProductImport
         assign_enterprise_field(entry)
         enterprise_validation(entry)
         unit_fields_validation(entry)
+        variant_of_product_validation(entry)
 
         next if entry.enterprise_id.blank?
 
@@ -102,6 +109,7 @@ module ProductImport
 
     def name_presence_error(entry)
       return if entry.enterprise.present?
+
       mark_as_invalid(entry,
                       attribute: enterprise_field,
                       error: I18n.t(:error_required))
@@ -110,6 +118,7 @@ module ProductImport
 
     def enterprise_not_found_error(entry)
       return if @spreadsheet_data.enterprises_index[entry.enterprise][:id]
+
       mark_as_invalid(entry,
                       attribute: enterprise_field,
                       error: I18n.t(:error_not_found_in_database,
@@ -119,6 +128,7 @@ module ProductImport
 
     def permissions_error(entry)
       return if permission_by_name?(entry.enterprise)
+
       mark_as_invalid(entry,
                       attribute: enterprise_field,
                       error: I18n.t(:error_no_permission_for_enterprise,
@@ -128,8 +138,7 @@ module ProductImport
 
     def primary_producer_error(entry)
       return if import_into_inventory?
-      return if @spreadsheet_data.
-          enterprises_index[entry.enterprise][:is_primary_producer]
+      return if @spreadsheet_data.enterprises_index[entry.enterprise][:is_primary_producer]
 
       mark_as_invalid(entry,
                       attribute: enterprise_field,
@@ -156,6 +165,31 @@ module ProductImport
 
       # variant_unit_name must be present if unit_type not present
       mark_as_invalid(entry, attribute: 'variant_unit_name', error: I18n.t('admin.product_import.model.conditional_blank')) unless entry.variant_unit_name && entry.variant_unit_name.present?
+    end
+
+    def variant_of_product_validation(entry)
+      return if entry.producer.blank? || entry.name.blank?
+
+      validate_unit_type_unchanged(entry)
+      validate_variant_unit_name_unchanged(entry)
+    end
+
+    def validate_unit_type_unchanged(entry)
+      return if entry.unit_type.blank?
+
+      reference_entry = all_entries_for_product(entry).first
+      return if entry.unit_type.to_s == reference_entry.unit_type.to_s
+
+      mark_as_not_updatable(entry, "unit_type")
+    end
+
+    def validate_variant_unit_name_unchanged(entry)
+      return if entry.variant_unit_name.blank?
+
+      reference_entry = all_entries_for_product(entry).first
+      return if entry.variant_unit_name.to_s == reference_entry.variant_unit_name.to_s
+
+      mark_as_not_updatable(entry, "variant_unit_name")
     end
 
     def producer_validation(entry)
@@ -288,6 +322,8 @@ module ProductImport
     def product_field_errors(entry, existing_product)
       EntryValidator.non_updatable_fields.each do |display_name, attribute|
         next if attributes_match?(attribute, existing_product, entry) || attributes_blank?(attribute, existing_product, entry)
+        next if ignore_when_updating_product?(attribute)
+
         mark_as_invalid(entry, attribute: display_name, error: I18n.t('admin.product_import.model.not_updatable'))
       end
     end
@@ -296,6 +332,10 @@ module ProductImport
       existing_product_value = existing_product.public_send(attribute)
       entry_value = entry.public_send(attribute)
       existing_product_value == convert_to_trusted_type(entry_value, existing_product_value)
+    end
+
+    def ignore_when_updating_product?(attribute)
+      SKIP_VALIDATE_ON_UPDATE.include? attribute
     end
 
     def convert_to_trusted_type(untrusted_attribute, trusted_attribute)
@@ -330,6 +370,11 @@ module ProductImport
     def mark_as_invalid(entry, options = {})
       entry.errors.add(options[:attribute], options[:error]) if options[:attribute] && options[:error]
       entry.product_validations = options[:product_validations] if options[:product_validations]
+    end
+
+    def mark_as_not_updatable(entry, attribute)
+      mark_as_invalid(entry, attribute: attribute,
+                             error: I18n.t("admin.product_import.model.not_updatable"))
     end
 
     def import_into_inventory?
@@ -385,6 +430,20 @@ module ProductImport
       object.count_on_hand = entry.on_hand.presence
       object.on_demand = object.count_on_hand.blank? if entry.on_demand.blank?
       entry.on_hand_nil = object.count_on_hand.blank?
+    end
+
+    def all_entries_for_product(entry)
+      all_entries_by_product[entries_by_product_key(entry)]
+    end
+
+    def all_entries_by_product
+      @all_entries_by_product ||= @all_entries.group_by do |entry|
+        entries_by_product_key(entry)
+      end
+    end
+
+    def entries_by_product_key(entry)
+      [entry.producer.to_s, entry.name.to_s]
     end
   end
 end

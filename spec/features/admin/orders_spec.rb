@@ -1,10 +1,10 @@
 require "spec_helper"
 include ActionView::Helpers::NumberHelper
 
-feature %q{
+feature '
     As an administrator
     I want to manage orders
-}, js: true do
+', js: true do
   include AuthenticationWorkflow
   include WebHelper
   include CheckoutHelper
@@ -73,7 +73,7 @@ feature %q{
     expect(page).to have_content 'ADD PRODUCT'
     targetted_select2_search @product.name, from: '#add_variant_id', dropdown_css: '.select2-drop'
     find('button.add_variant').click
-    page.has_selector? "table.index tbody[data-hook='admin_order_form_line_items'] tr"  # Wait for JS
+    page.has_selector? "table.index tbody[data-hook='admin_order_form_line_items'] tr" # Wait for JS
     expect(page).to have_selector 'td', text: @product.name
 
     click_button 'Update'
@@ -84,7 +84,7 @@ feature %q{
     expect(o.order_cycle).to eq(@order_cycle)
   end
 
-  scenario "can add a product to an existing order", retry: 3 do
+  scenario "can add a product to an existing order" do
     quick_login_as_admin
     visit '/admin/orders'
 
@@ -116,13 +116,13 @@ feature %q{
     page.find('a.icon-search').click
 
     click_icon :edit
+    expect(page).to have_select2 "order_distributor_id", with_options: [d.name]
     select2_select d.name, from: 'order_distributor_id'
     select2_select oc.name, from: 'order_order_cycle_id'
 
     click_button 'Update And Recalculate Fees'
     expect(page).to have_content "Distributor or order cycle cannot supply the products in your cart"
   end
-
 
   scenario "can't add products to an order outside the order's hub and order cycle" do
     product = create(:simple_product)
@@ -164,7 +164,7 @@ feature %q{
     new_order_with_distribution(@distributor, @order_cycle)
     targetted_select2_search @product.name, from: '#add_variant_id', dropdown_css: '.select2-drop'
     find('button.add_variant').click
-    page.has_selector? "table.index tbody[data-hook='admin_order_form_line_items'] tr"  # Wait for JS
+    page.has_selector? "table.index tbody[data-hook='admin_order_form_line_items'] tr" # Wait for JS
     click_button 'Update'
 
     expect(page).to have_selector 'h1.page-title', text: "Customer Details"
@@ -187,15 +187,27 @@ feature %q{
     expect(page).to have_current_path spree.admin_orders_path
 
     # click the 'capture' link for the order
-    page.find("[data-action=capture][href*=#{@order.number}]").click
+    page.find("[data-powertip=Capture]").click
 
-    expect(page).to have_content "Payment Updated"
+    expect(page).to have_css "i.success"
+    expect(page).to have_css "button.icon-road"
 
     # check the order was captured
     expect(@order.reload.payment_state).to eq "paid"
 
     # we should still be on the same page
     expect(page).to have_current_path spree.admin_orders_path
+  end
+
+  scenario "ship order from the orders index page" do
+    @order.payments.first.capture!
+    quick_login_as_admin
+    visit spree.admin_orders_path
+
+    page.find("[data-powertip=Ship]").click
+
+    expect(page).to have_css "i.success"
+    expect(@order.reload.shipments.any?(&:shipped?)).to be true
   end
 
   context "as an enterprise manager" do
@@ -223,25 +235,25 @@ feature %q{
       let!(:different_shipping_method_for_distributor1) { create(:shipping_method, name: "Different", distributors: [distributor1]) }
       let!(:shipping_method_for_distributor2) { create(:shipping_method, name: "Other", distributors: [distributor2]) }
 
+      let!(:order) do
+        create(:order_with_taxes, distributor: distributor1, ship_address: create(:address),
+                                  product_price: 110, tax_rate_amount: 0.1,
+                                  tax_rate_name: "Tax 1").tap do |record|
+                                    Spree::TaxRate.adjust(record)
+                                    record.update_shipping_fees!
+                                  end
+      end
+
       background do
         Spree::Config[:enable_receipt_printing?] = true
-
         distributor1.update_attribute(:abn, '12345678')
-        @order = create(:order_with_taxes,
-                        distributor: distributor1,
-                        ship_address: create(:address),
-                        product_price: 110,
-                        tax_rate_amount: 0.1,
-                        tax_rate_name: "Tax 1")
-        Spree::TaxRate.adjust(@order)
-        @order.update_shipping_fees!
 
-        visit spree.edit_admin_order_path(@order)
+        visit spree.edit_admin_order_path(order)
       end
 
       scenario "shows a list of line_items" do
         within('table.index tbody', match: :first) do
-          @order.line_items.each do |item|
+          order.line_items.each do |item|
             expect(page).to have_selector "td", match: :first, text: item.full_name
             expect(page).to have_selector "td.item-price", text: item.single_display_amount
             expect(page).to have_selector "input#quantity[value='#{item.quantity}']", visible: false
@@ -252,13 +264,13 @@ feature %q{
 
       scenario "shows the order items total" do
         within('fieldset#order-total') do
-          expect(page).to have_selector "span.order-total", text: @order.display_item_total
+          expect(page).to have_selector "span.order-total", text: order.display_item_total
         end
       end
 
       scenario "shows the order non-tax adjustments" do
         within('table.index tbody') do
-          @order.adjustments.eligible.each do |adjustment|
+          order.adjustments.eligible.each do |adjustment|
             expect(page).to have_selector "td", match: :first, text: adjustment.label
             expect(page).to have_selector "td.total", text: adjustment.display_amount
           end
@@ -266,7 +278,7 @@ feature %q{
       end
 
       scenario "shows the order total" do
-        expect(page).to have_selector "fieldset#order-total", text: @order.display_total
+        expect(page).to have_selector "fieldset#order-total", text: order.display_total
       end
 
       scenario "shows the order tax adjustments" do
@@ -279,10 +291,10 @@ feature %q{
       scenario "shows the dropdown menu" do
         find("#links-dropdown .ofn-drop-down").click
         within "#links-dropdown" do
-          expect(page).to have_link "Resend Confirmation", href: spree.resend_admin_order_path(@order)
-          expect(page).to have_link "Send Invoice", href: spree.invoice_admin_order_path(@order)
-          expect(page).to have_link "Print Invoice", href: spree.print_admin_order_path(@order)
-          expect(page).to have_link "Cancel Order", href: spree.fire_admin_order_path(@order, :e => 'cancel')
+          expect(page).to have_link "Resend Confirmation", href: spree.resend_admin_order_path(order)
+          expect(page).to have_link "Send Invoice", href: spree.invoice_admin_order_path(order)
+          expect(page).to have_link "Print Invoice", href: spree.print_admin_order_path(order)
+          expect(page).to have_link "Cancel Order", href: spree.fire_admin_order_path(order, e: 'cancel')
         end
       end
 
@@ -327,27 +339,27 @@ feature %q{
             print_data = page.evaluate_script('printData');
             elements_in_print_data =
               [
-                @order.distributor.name,
-                @order.distributor.address.address_part1,
-                @order.distributor.address.address_part2,
-                @order.distributor.contact.email,
-                @order.number,
-                @order.line_items.map { |line_item|
+                order.distributor.name,
+                order.distributor.address.address_part1,
+                order.distributor.address.address_part2,
+                order.distributor.contact.email,
+                order.number,
+                order.line_items.map { |line_item|
                   [line_item.quantity.to_s,
                    line_item.product.name,
                    line_item.single_display_amount_with_adjustments.format(symbol: false, with_currency: false),
                    line_item.display_amount_with_adjustments.format(symbol: false, with_currency: false)]
                 },
-                checkout_adjustments_for(@order, exclude: [:line_item]).reject { |a| a.amount == 0 }.map { |adjustment|
+                checkout_adjustments_for(order, exclude: [:line_item]).reject { |a| a.amount == 0 }.map { |adjustment|
                   [raw(adjustment.label),
                    display_adjustment_amount(adjustment).format(symbol: false, with_currency: false)]
                 },
-                @order.display_total.format(with_currency: false),
-                display_checkout_taxes_hash(@order).map { |tax_rate, tax_value|
+                order.display_total.format(with_currency: false),
+                display_checkout_taxes_hash(order).map { |tax_rate, tax_value|
                   [tax_rate,
                    tax_value.format(with_currency: false)]
                 },
-                display_checkout_total_less_tax(@order).format(with_currency: false)
+                display_checkout_total_less_tax(order).format(with_currency: false)
               ]
             expect(print_data.join).to include(*elements_in_print_data.flatten)
           end
@@ -363,6 +375,18 @@ feature %q{
 
         expect(page.find("td.amount")).to have_content "$5.00"
       end
+
+      context "when an included variant has been deleted" do
+        let!(:deleted_variant) do
+          order.line_items.first.variant.tap(&:delete)
+        end
+
+        it "still lists the variant in the order page" do
+          within ".stock-contents" do
+            expect(page).to have_content deleted_variant.product_and_full_name
+          end
+        end
+      end
     end
 
     scenario "creating an order with distributor and order cycle" do
@@ -372,7 +396,7 @@ feature %q{
       targetted_select2_search product.name, from: '#add_variant_id', dropdown_css: '.select2-drop'
 
       find('button.add_variant').click
-      page.has_selector? "table.index tbody[data-hook='admin_order_form_line_items'] tr"  # Wait for JS
+      page.has_selector? "table.index tbody[data-hook='admin_order_form_line_items'] tr" # Wait for JS
       expect(page).to have_selector 'td', text: product.name
 
       expect(page).to have_select2 'order_distributor_id', with_options: [distributor1.name]

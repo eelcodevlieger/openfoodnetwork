@@ -14,7 +14,7 @@ module Api
                :long_description, :website, :instagram, :linkedin, :twitter,
                :facebook, :is_primary_producer, :is_distributor, :phone, :visible,
                :email_address, :hash, :logo, :promo_image, :path, :pickup, :delivery,
-               :icon, :icon_font, :producer_icon_font, :category, :producers, :hubs
+               :icon, :icon_font, :producer_icon_font, :category
 
     attributes :taxons, :supplied_taxons
 
@@ -53,16 +53,6 @@ module Api
       enterprise_shop_path(enterprise)
     end
 
-    def producers
-      relatives = data.relatives[enterprise.id]
-      ids_to_objs(relatives.andand[:producers])
-    end
-
-    def hubs
-      relatives = data.relatives[enterprise.id]
-      ids_to_objs(relatives.andand[:distributors])
-    end
-
     def taxons
       if active
         ids_to_objs data.current_distributed_taxons[enterprise.id]
@@ -83,12 +73,16 @@ module Api
 
     # This results in 3 queries per enterprise
     def distributed_properties
+      return [] unless active
+
       (distributed_product_properties + distributed_producer_properties).uniq do |property_object|
         property_object.property.presentation
       end
     end
 
     def distributed_product_properties
+      return [] unless active
+
       properties = Spree::Property
         .joins(products: { variants: { exchanges: :order_cycle } })
         .merge(Exchange.outgoing)
@@ -96,10 +90,13 @@ module Api
         .select('DISTINCT spree_properties.*')
 
       return properties.merge(OrderCycle.active) if active
+
       properties
     end
 
     def distributed_producer_properties
+      return [] unless active
+
       properties = Spree::Property
         .joins(
           producer_properties: {
@@ -111,11 +108,12 @@ module Api
         .select('DISTINCT spree_properties.*')
 
       return properties.merge(OrderCycle.active) if active
+
       properties
     end
 
     def active
-      data.active_distributors.andand.include? enterprise
+      data.active_distributor_ids.andand.include? enterprise.id
     end
 
     # Map svg icons.

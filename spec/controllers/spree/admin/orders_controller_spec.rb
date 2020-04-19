@@ -47,7 +47,7 @@ describe Spree::Admin::OrdersController, type: :controller do
       let(:order) { create :completed_order_with_totals }
 
       it "updates distribution charges and redirects to order details page" do
-        Spree::Order.any_instance.should_receive(:update_distribution_charge!)
+        expect_any_instance_of(Spree::Order).to receive(:update_distribution_charge!)
 
         spree_put :update, params
 
@@ -77,7 +77,7 @@ describe Spree::Admin::OrdersController, type: :controller do
 
         context "and no errors" do
           it "updates distribution charges and redirects to customer details page" do
-            Spree::Order.any_instance.should_receive(:update_distribution_charge!)
+            expect_any_instance_of(Spree::Order).to receive(:update_distribution_charge!)
 
             spree_put :update, params
 
@@ -154,7 +154,7 @@ describe Spree::Admin::OrdersController, type: :controller do
           it "should allow me to send order invoices" do
             expect do
               spree_get :invoice, params
-            end.to_not change{Spree::OrderMailer.deliveries.count}
+            end.to_not change{ Spree::OrderMailer.deliveries.count }
             expect(response).to redirect_to spree.edit_admin_order_path(order)
             expect(flash[:error]).to eq "#{distributor.name} must have a valid ABN before invoices can be sent."
           end
@@ -170,7 +170,7 @@ describe Spree::Admin::OrdersController, type: :controller do
           it "should allow me to send order invoices" do
             expect do
               spree_get :invoice, params
-            end.to change{Spree::OrderMailer.deliveries.count}.by(1)
+            end.to change{ Spree::OrderMailer.deliveries.count }.by(1)
             expect(response).to redirect_to spree.edit_admin_order_path(order)
           end
         end

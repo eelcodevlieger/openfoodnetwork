@@ -17,61 +17,60 @@ describe Admin::BulkLineItemsController, type: :controller do
     let!(:line_item4) { FactoryBot.create(:line_item_with_shipment, order: order3) }
 
     context "as a normal user" do
-      before { controller.stub spree_current_user: create_enterprise_user }
+      before { allow(controller).to receive_messages spree_current_user: create_enterprise_user }
 
       it "should deny me access to the index action" do
-        spree_get :index, :format => :json
+        spree_get :index, format: :json
         expect(response).to redirect_to spree.unauthorized_path
       end
     end
 
     context "as an administrator" do
       before do
-        controller.stub spree_current_user: quick_login_as_admin
+        allow(controller).to receive_messages spree_current_user: create(:admin_user)
       end
 
       context "when no ransack params are passed in" do
         before do
-          spree_get :index, :format => :json
+          spree_get :index, format: :json
         end
 
         it "retrieves a list of line_items with appropriate attributes, including line items with appropriate attributes" do
-          keys = json_response.first.keys.map(&:to_sym)
-          line_item_attributes.all?{ |attr| keys.include? attr }.should == true
+          keys = json_response['line_items'].first.keys.map(&:to_sym)
+          expect(line_item_attributes.all?{ |attr| keys.include? attr }).to eq(true)
         end
 
         it "sorts line_items in ascending id line_item" do
-          ids = json_response.map{ |line_item| line_item['id'] }
-          expect(ids[0]).to be < ids[1]
-          expect(ids[1]).to be < ids[2]
+          expect(line_item_ids[0]).to be < line_item_ids[1]
+          expect(line_item_ids[1]).to be < line_item_ids[2]
         end
 
         it "formats final_weight_volume as a float" do
-          json_response.map{ |line_item| line_item['final_weight_volume'] }.all?{ |fwv| fwv.is_a?(Float) }.should == true
+          expect(json_response['line_items'].map{ |line_item| line_item['final_weight_volume'] }.all?{ |fwv| fwv.is_a?(Float) }).to eq(true)
         end
 
         it "returns distributor object with id key" do
-          json_response.map{ |line_item| line_item['supplier'] }.all?{ |d| d.key?('id') }.should == true
+          expect(json_response['line_items'].map{ |line_item| line_item['supplier'] }.all?{ |d| d.key?('id') }).to eq(true)
         end
       end
 
       context "when ransack params are passed in for line items" do
         before do
-          spree_get :index, :format => :json, q: { order_id_eq: order2.id }
+          spree_get :index, format: :json, q: { order_id_eq: order2.id }
         end
 
         it "retrives a list of line items which match the criteria" do
-          expect(json_response.map{ |line_item| line_item['id'] }).to eq [line_item2.id, line_item3.id]
+          expect(line_item_ids).to eq [line_item2.id, line_item3.id]
         end
       end
 
       context "when ransack params are passed in for orders" do
         before do
-          spree_get :index, :format => :json, q: { order: { completed_at_gt: 2.hours.ago } }
+          spree_get :index, format: :json, q: { order: { completed_at_gt: 2.hours.ago } }
         end
 
         it "retrives a list of line items whose orders match the criteria" do
-          expect(json_response.map{ |line_item| line_item['id'] }).to eq [line_item2.id, line_item3.id, line_item4.id]
+          expect(line_item_ids).to eq [line_item2.id, line_item3.id, line_item4.id]
         end
       end
     end
@@ -90,8 +89,8 @@ describe Admin::BulkLineItemsController, type: :controller do
 
       context "producer enterprise" do
         before do
-          controller.stub spree_current_user: supplier.owner
-          spree_get :index, :format => :json
+          allow(controller).to receive_messages spree_current_user: supplier.owner
+          spree_get :index, format: :json
         end
 
         it "does not display line items for which my enterprise is a supplier" do
@@ -101,25 +100,51 @@ describe Admin::BulkLineItemsController, type: :controller do
 
       context "coordinator enterprise" do
         before do
-          controller.stub spree_current_user: coordinator.owner
-          spree_get :index, :format => :json
+          allow(controller).to receive_messages spree_current_user: coordinator.owner
+          spree_get :index, format: :json
         end
 
         it "retrieves a list of line_items" do
-          keys = json_response.first.keys.map(&:to_sym)
-          line_item_attributes.all?{ |attr| keys.include? attr }.should == true
+          keys = json_response['line_items'].first.keys.map(&:to_sym)
+          expect(line_item_attributes.all?{ |attr| keys.include? attr }).to eq(true)
         end
       end
 
       context "hub enterprise" do
         before do
-          controller.stub spree_current_user: distributor1.owner
-          spree_get :index, :format => :json
+          allow(controller).to receive_messages spree_current_user: distributor1.owner
+          spree_get :index, format: :json
         end
 
         it "retrieves a list of line_items" do
-          keys = json_response.first.keys.map(&:to_sym)
-          line_item_attributes.all?{ |attr| keys.include? attr }.should == true
+          keys = json_response['line_items'].first.keys.map(&:to_sym)
+          expect(line_item_attributes.all?{ |attr| keys.include? attr }).to eq(true)
+        end
+      end
+    end
+
+    context "paginating" do
+      before do
+        allow(controller).to receive_messages spree_current_user: create(:admin_user)
+      end
+
+      context "with pagination args" do
+        it "returns paginated results" do
+          spree_get :index, { page: 1, per_page: 2 }, format: :json
+
+          expect(line_item_ids).to eq [line_item1.id, line_item2.id]
+          expect(json_response['pagination']).to eq(
+            { 'page' => 1, 'per_page' => 2, 'pages' => 2, 'results' => 4 }
+          )
+        end
+
+        it "returns paginated results for a second page" do
+          spree_get :index, { page: 2, per_page: 2 }, format: :json
+
+          expect(line_item_ids).to eq [line_item3.id, line_item4.id]
+          expect(json_response['pagination']).to eq(
+            { 'page' => 2, 'per_page' => 2, 'pages' => 2, 'results' => 4 }
+          )
         end
       end
     end
@@ -142,7 +167,7 @@ describe Admin::BulkLineItemsController, type: :controller do
     context "as an enterprise user" do
       context "producer enterprise" do
         before do
-          controller.stub spree_current_user: supplier.owner
+          allow(controller).to receive_messages spree_current_user: supplier.owner
           spree_put :update, params
         end
 
@@ -155,7 +180,7 @@ describe Admin::BulkLineItemsController, type: :controller do
         render_views
 
         before do
-          controller.stub spree_current_user: coordinator.owner
+          allow(controller).to receive_messages spree_current_user: coordinator.owner
         end
 
         # Used in admin/orders/bulk_management
@@ -209,7 +234,7 @@ describe Admin::BulkLineItemsController, type: :controller do
 
       context "hub enterprise" do
         before do
-          controller.stub spree_current_user: distributor1.owner
+          allow(controller).to receive_messages spree_current_user: distributor1.owner
           xhr :put, :update, params
         end
 
@@ -235,7 +260,7 @@ describe Admin::BulkLineItemsController, type: :controller do
     let(:params) { { id: line_item1.id, order_id: order1.number } }
 
     before do
-      controller.stub spree_current_user: coordinator.owner
+      allow(controller).to receive_messages spree_current_user: coordinator.owner
     end
 
     # Used in admin/orders/bulk_management
@@ -258,5 +283,11 @@ describe Admin::BulkLineItemsController, type: :controller do
         expect(response.status).to eq 204
       end
     end
+  end
+
+  private
+
+  def line_item_ids
+    json_response['line_items'].map{ |line_item| line_item['id'] }
   end
 end
